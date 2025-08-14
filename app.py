@@ -1,19 +1,46 @@
 import streamlit as st
 import pandas as pd
 import pickle
-from geopy.geocoders import Nominatim
+import requests
+
 
 # Load trained pipeline
 with open("model.pkl", "rb") as f:
     model = pickle.load(f)
 
 # Load your training feature names (important for building input DataFrame)
-# If you saved X_train's columns during training, load them here:
 with open("feature_columns.pkl", "rb") as f:
     feature_columns = pickle.load(f)
 
 # Geocoder setup
-geolocator = Nominatim(user_agent="house_price_app")
+def geocode_address(address):
+    """
+    Use PositionStack API to convert an address into (lat, lon).
+    Requires POSITIONSTACK_API_KEY in Streamlit secrets.
+    """
+    api_key = st.secrets["POSITIONSTACK_API_KEY"]
+    base_url = "http://api.positionstack.com/v1/forward"
+    params = {
+        "access_key": api_key,
+        "query": address,
+        "limit": 1
+    }
+
+    try:
+        response = requests.get(base_url, params=params, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+
+        if "data" in data and len(data["data"]) > 0:
+            location = data["data"][0]
+            return location["latitude"], location["longitude"]
+        else:
+            st.error("No results found for the given address.")
+            return None, None
+
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error contacting PositionStack API: {e}")
+        return None, None
 
 st.title("🏡 California House Price Predictor")
 st.write("Enter the address and property details to predict price.")
@@ -38,40 +65,41 @@ new_construction_yn = st.checkbox("New Construction")
 
 if st.button("Predict Price"):
     try:
-        location = geolocator.geocode(address)
-        if not location:
-            st.error("Could not geocode the address. Please check and try again.")
-        else:
-            lat = location.latitude
-            lon = location.longitude
+        lat, lon = geocode_address(address)
+        if lat is None or lon is None:
+            st.stop()
 
-            # Build input DataFrame with all model-required columns
-            input_dict = {
-                "Latitude": [lat],
-                "Longitude": [lon],
-                "LivingArea": [living_area],
-                "BathroomsTotalInteger": [bathrooms],
-                "BedroomsTotal": [bedrooms],
-                "Stories": [stories],
-                "GarageSpaces": [garage_spaces],
-                "LotSizeSquareFeet": [lot_size_sqft],
-                "ViewYN": [int(view_yn)],
-                "PoolPrivateYN": [int(pool_yn)],
-                "AttachedGarageYN": [int(attached_garage_yn)],
-                "FireplaceYN": [int(fireplace_yn)],
-                "NewConstructionYN": [int(new_construction_yn)]
-            }
+        st.write(f"Latitude: {lat}, Longitude: {lon}")
 
-            # Fill in any missing columns with defaults (needed for model pipeline)
-            df_input = pd.DataFrame(input_dict)
-            for col in feature_columns:
-                if col not in df_input.columns:
-                    df_input[col] = 0  # or sensible default
+        # Build input DataFrame with all model-required columns
+        input_dict = {
+            "Latitude": [lat],
+            "Longitude": [lon],
+            "LivingArea": [living_area],
+            "BathroomsTotalInteger": [bathrooms],
+            "BedroomsTotal": [bedrooms],
+            "Stories": [stories],
+            "GarageSpaces": [garage_spaces],
+            "LotSizeSquareFeet": [lot_size_sqft],
+            "ViewYN": [int(view_yn)],
+            "PoolPrivateYN": [int(pool_yn)],
+            "AttachedGarageYN": [int(attached_garage_yn)],
+            "FireplaceYN": [int(fireplace_yn)],
+            "NewConstructionYN": [int(new_construction_yn)]
+        }
 
-            df_input = df_input[feature_columns]  # match training order
+        # Fill in any missing columns with defaults
+        df_input = pd.DataFrame(input_dict)
+        for col in feature_columns:
+            if col not in df_input.columns:
+                df_input[col] = 0  # default value for missing columns
 
-            prediction = model.predict(df_input)[0]
-            st.success(f"Estimated Price: ${prediction:,.0f}")
+        # Reorder columns to match training data
+        df_input = df_input[feature_columns]
+
+        # Make prediction
+        prediction = model.predict(df_input)[0]
+        st.success(f"Estimated Price: ${prediction:,.0f}")
 
     except Exception as e:
         st.error(f"Error: {e}")
