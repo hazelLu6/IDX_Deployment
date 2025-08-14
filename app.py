@@ -66,6 +66,7 @@ new_construction_yn = st.checkbox("New Construction")
 if st.button("Predict Price"):
     try:
         lat, lon = geocode_address(address)
+        st.write("Secrets keys:", list(st.secrets.keys()))
         if lat is None or lon is None:
             st.stop()
 
