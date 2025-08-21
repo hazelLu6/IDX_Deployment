@@ -7,6 +7,8 @@ import requests
 with open("xgb_model.pkl", "rb") as f:
     model = pickle.load(f)
 
+print(xgboost.__version__)
+
 # load the list of features that the model was trained on
 with open("features.pkl", "rb") as f:
     feature_columns = pickle.load(f)
