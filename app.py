@@ -5,12 +5,16 @@ import requests
 
 
 # Load trained pipeline
-with open("model.pkl", "rb") as f:
+with open("xgb_model.pkl", "rb") as f:
     model = pickle.load(f)
 
 # Load your training feature names (important for building input DataFrame)
-with open("feature_columns.pkl", "rb") as f:
+with open("features.pkl", "rb") as f:
     feature_columns = pickle.load(f)
+    
+print("Feature names loaded from pickle file:")
+for name in feature_columns:
+    print(name)
 
 # Geocoder setup
 def geocode_address(address):
